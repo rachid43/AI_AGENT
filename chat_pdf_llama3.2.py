@@ -5,14 +5,24 @@ import streamlit as st
 from embedchain import App
 import base64
 from streamlit_chat import message
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 # Define the embedchain_bot function
-def embedchain_bot(db_path):
+def embedchain_bot(db_path, openai_api_key):
     return App.from_config(
         config={
             "llm": {"provider": "ollama", "config": {"model": "llama3.2:latest", "max_tokens": 250, "temperature": 0.5, "stream": True, "base_url": 'http://localhost:11434'}},
             "vectordb": {"provider": "chroma", "config": {"dir": db_path}},
-            "embedder": {"provider": "ollama", "config": {"model": "llama3.2:latest", "base_url": 'http://localhost:11434'}},
+            "embedder": {"provider": "openai", "config": {"api_key": openai_api_key}},
+            "cache": {
+                "similarity_evaluation": {
+                    "strategy": "distance",
+                    "max_distance": 0.2
+                }
+            }
         }
     )
 
@@ -25,19 +35,43 @@ def display_pdf(file):
 st.title("Chat with PDF using Llama 3.2")
 st.caption("This app allows you to chat with a PDF using Llama 3.2 running locally with Ollama!")
 
-# Define the database path
-db_path = tempfile.mkdtemp()
-
-# Create a session state to store the app instance and chat history
-if 'app' not in st.session_state:
-    st.session_state.app = embedchain_bot(db_path)
+# Initialize session state for messages
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 
-# Sidebar for PDF upload and preview
+# Sidebar for configuration and PDF upload
 with st.sidebar:
-    st.header("PDF Upload")
-    pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
+    st.header("⚙️ Configuration")
+
+    # OpenAI API Key input - check environment variable first
+    env_api_key = os.getenv("OPENAI_API_KEY")
+    if env_api_key:
+        openai_api_key = env_api_key
+        st.success("✅ Using OpenAI API key from environment")
+    else:
+        openai_api_key = st.text_input(
+            "OpenAI API Key",
+            type="password",
+            help="Enter your OpenAI API key for fast embeddings. Get one at https://platform.openai.com/api-keys"
+        )
+
+    # Initialize app only when API key is provided
+    if openai_api_key and 'app' not in st.session_state:
+        with st.spinner("Initializing app..."):
+            # Use persistent directory for ChromaDB instead of temp directory
+            db_path = os.path.join(os.getcwd(), "chroma_db")
+            os.makedirs(db_path, exist_ok=True)
+            st.session_state.app = embedchain_bot(db_path, openai_api_key)
+            st.success("✅ App initialized with OpenAI embeddings!")
+
+    st.divider()
+    st.header("📄 PDF Upload")
+
+    if not openai_api_key:
+        st.warning("⚠️ Please enter your OpenAI API key above to continue.")
+        pdf_file = None
+    else:
+        pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
 
     if pdf_file:
         st.subheader("PDF Preview")
@@ -52,18 +86,23 @@ with st.sidebar:
             st.success(f"Added {pdf_file.name} to knowledge base!")
 
 # Chat interface
-for i, msg in enumerate(st.session_state.messages):
-    message(msg["content"], is_user=msg["role"] == "user", key=str(i))
+if 'app' in st.session_state:
+    for i, msg in enumerate(st.session_state.messages):
+        message(msg["content"], is_user=msg["role"] == "user", key=str(i))
 
-if prompt := st.chat_input("Ask a question about the PDF"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    message(prompt, is_user=True)
+    if prompt := st.chat_input("Ask a question about the PDF"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        message(prompt, is_user=True)
 
-    with st.spinner("Thinking..."):
-        response = st.session_state.app.chat(prompt)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        message(response)
+        with st.spinner("Thinking..."):
+            response = st.session_state.app.chat(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            message(response)
+else:
+    st.info("👈 Please enter your OpenAI API key in the sidebar to start chatting!")
 
 # Clear chat history button
-if st.button("Clear Chat History"):
-    st.session_state.messages = []
+if 'app' in st.session_state:
+    if st.button("Clear Chat History"):
+        st.session_state.messages = []
+        st.rerun()
