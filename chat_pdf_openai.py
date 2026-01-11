@@ -3,8 +3,11 @@ import tempfile
 import streamlit as st
 from embedchain import App
 import base64
-from streamlit_chat import message
 from dotenv import load_dotenv
+import time
+
+# Must be the first Streamlit command
+st.set_page_config(page_title="Chat with PDF", page_icon="📄", layout="wide")
 
 load_dotenv()
 
@@ -21,13 +24,7 @@ def embedchain_bot(db_path, openai_api_key, model="gpt-3.5-turbo"):
                 }
             },
             "vectordb": {"provider": "chroma", "config": {"dir": db_path}},
-            "embedder": {"provider": "openai", "config": {"api_key": openai_api_key}},
-            "cache": {
-                "similarity_evaluation": {
-                    "strategy": "distance",
-                    "max_distance": 0.2
-                }
-            }
+            "embedder": {"provider": "openai", "config": {"api_key": openai_api_key}}
         }
     )
 
@@ -36,8 +33,36 @@ def display_pdf(file):
     pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>'
     st.markdown(pdf_display, unsafe_allow_html=True)
 
-st.title("Chat with PDF using OpenAI")
-st.caption("This app allows you to chat with a PDF using OpenAI's models (GPT-3.5-turbo or GPT-4o-mini) for fast, intelligent responses!")
+# Custom CSS for thinking dots animation
+st.markdown("""
+    <style>
+    .thinking-dots {
+        display: inline-block;
+        font-size: 24px;
+        animation: thinking 1.4s infinite;
+    }
+
+    .thinking-dots::after {
+        content: '...';
+        animation: dots 1.4s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+        0%, 20% { content: '.'; }
+        40% { content: '..'; }
+        60%, 100% { content: '...'; }
+    }
+
+    /* Improve chat message styling */
+    .stChatMessage {
+        padding: 1rem;
+        border-radius: 0.5rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("💬 Chat with PDF using OpenAI")
+st.caption("Ask questions about your PDF documents using GPT-3.5-turbo or GPT-4o-mini for fast, intelligent responses!")
 
 if 'messages' not in st.session_state:
     st.session_state.messages = []
@@ -91,17 +116,29 @@ with st.sidebar:
             st.success(f"Added {pdf_file.name} to knowledge base!")
 
 if 'app' in st.session_state:
-    for i, msg in enumerate(st.session_state.messages):
-        message(msg["content"], is_user=msg["role"] == "user", key=str(i))
+    # Display chat messages
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "🤖"):
+            st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Ask a question about the PDF"):
+    # Chat input
+    if prompt := st.chat_input("💭 Ask a question about your PDF..."):
+        # Add user message to chat
         st.session_state.messages.append({"role": "user", "content": prompt})
-        message(prompt, is_user=True)
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(prompt)
 
-        with st.spinner("Thinking..."):
+        # Show thinking animation and get response
+        with st.chat_message("assistant", avatar="🤖"):
+            thinking_placeholder = st.empty()
+            thinking_placeholder.markdown('<div class="thinking-dots">Thinking</div>', unsafe_allow_html=True)
+
             response = st.session_state.app.chat(prompt)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            message(response)
+
+            thinking_placeholder.empty()
+            st.markdown(response)
+
+        st.session_state.messages.append({"role": "assistant", "content": response})
 else:
     st.info("👈 Please enter your OpenAI API key in the sidebar to start chatting!")
 
