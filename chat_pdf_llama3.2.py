@@ -14,7 +14,15 @@ load_dotenv()
 def embedchain_bot(db_path, openai_api_key):
     return App.from_config(
         config={
-            "llm": {"provider": "ollama", "config": {"model": "llama3.2:latest", "max_tokens": 250, "temperature": 0.5, "stream": True, "base_url": 'http://localhost:11434'}},
+            "llm": {
+                "provider": "openai",
+                "config": {
+                    "model": "gpt-3.5-turbo",
+                    "temperature": 0.5,
+                    "max_tokens": 500,
+                    "api_key": openai_api_key
+                }
+            },
             "vectordb": {"provider": "chroma", "config": {"dir": db_path}},
             "embedder": {"provider": "openai", "config": {"api_key": openai_api_key}},
             "cache": {
@@ -32,8 +40,8 @@ def display_pdf(file):
     pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>'
     st.markdown(pdf_display, unsafe_allow_html=True)
 
-st.title("Chat with PDF using Llama 3.2")
-st.caption("This app allows you to chat with a PDF using Llama 3.2 running locally with Ollama!")
+st.title("Chat with PDF using GPT-3.5")
+st.caption("This app allows you to chat with a PDF using OpenAI's GPT-3.5-turbo for fast, intelligent responses!")
 
 # Initialize session state for messages
 if 'messages' not in st.session_state:
@@ -52,7 +60,7 @@ with st.sidebar:
         openai_api_key = st.text_input(
             "OpenAI API Key",
             type="password",
-            help="Enter your OpenAI API key for fast embeddings. Get one at https://platform.openai.com/api-keys"
+            help="Enter your OpenAI API key for GPT-3.5-turbo and embeddings. Get one at https://platform.openai.com/api-keys"
         )
 
     # Initialize app only when API key is provided
@@ -62,7 +70,7 @@ with st.sidebar:
             db_path = os.path.join(os.getcwd(), "chroma_db")
             os.makedirs(db_path, exist_ok=True)
             st.session_state.app = embedchain_bot(db_path, openai_api_key)
-            st.success("✅ App initialized with OpenAI embeddings!")
+            st.success("✅ App initialized with GPT-3.5-turbo! Expect 2-3 second response times.")
 
     st.divider()
     st.header("📄 PDF Upload")
