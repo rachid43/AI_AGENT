@@ -1,4 +1,3 @@
-# Import necessary libraries
 import os
 import tempfile
 import streamlit as st
@@ -7,17 +6,15 @@ import base64
 from streamlit_chat import message
 from dotenv import load_dotenv
 
-# Load environment variables from .env file if it exists
 load_dotenv()
 
-# Define the embedchain_bot function
-def embedchain_bot(db_path, openai_api_key):
+def embedchain_bot(db_path, openai_api_key, model="gpt-3.5-turbo"):
     return App.from_config(
         config={
             "llm": {
                 "provider": "openai",
                 "config": {
-                    "model": "gpt-3.5-turbo",
+                    "model": model,
                     "temperature": 0.5,
                     "max_tokens": 500,
                     "api_key": openai_api_key
@@ -34,24 +31,26 @@ def embedchain_bot(db_path, openai_api_key):
         }
     )
 
-# Add a function to display PDF
 def display_pdf(file):
     base64_pdf = base64.b64encode(file.read()).decode('utf-8')
     pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>'
     st.markdown(pdf_display, unsafe_allow_html=True)
 
-st.title("Chat with PDF using GPT-3.5")
-st.caption("This app allows you to chat with a PDF using OpenAI's GPT-3.5-turbo for fast, intelligent responses!")
+st.title("Chat with PDF using OpenAI")
+st.caption("This app allows you to chat with a PDF using OpenAI's models (GPT-3.5-turbo or GPT-4o-mini) for fast, intelligent responses!")
 
-# Initialize session state for messages
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 
-# Sidebar for configuration and PDF upload
 with st.sidebar:
     st.header("⚙️ Configuration")
 
-    # OpenAI API Key input - check environment variable first
+    model_choice = st.selectbox(
+        "Select Model",
+        ["gpt-3.5-turbo", "gpt-4o-mini"],
+        help="Choose between GPT-3.5-turbo (faster, cheaper) or GPT-4o-mini (more capable)"
+    )
+
     env_api_key = os.getenv("OPENAI_API_KEY")
     if env_api_key:
         openai_api_key = env_api_key
@@ -63,14 +62,12 @@ with st.sidebar:
             help="Enter your OpenAI API key for GPT-3.5-turbo and embeddings. Get one at https://platform.openai.com/api-keys"
         )
 
-    # Initialize app only when API key is provided
     if openai_api_key and 'app' not in st.session_state:
         with st.spinner("Initializing app..."):
-            # Use persistent directory for ChromaDB instead of temp directory
             db_path = os.path.join(os.getcwd(), "chroma_db")
             os.makedirs(db_path, exist_ok=True)
-            st.session_state.app = embedchain_bot(db_path, openai_api_key)
-            st.success("✅ App initialized with GPT-3.5-turbo! Expect 2-3 second response times.")
+            st.session_state.app = embedchain_bot(db_path, openai_api_key, model_choice)
+            st.success(f"✅ App initialized with {model_choice}! Expect 2-3 second response times.")
 
     st.divider()
     st.header("📄 PDF Upload")
@@ -93,7 +90,6 @@ with st.sidebar:
                 os.remove(f.name)
             st.success(f"Added {pdf_file.name} to knowledge base!")
 
-# Chat interface
 if 'app' in st.session_state:
     for i, msg in enumerate(st.session_state.messages):
         message(msg["content"], is_user=msg["role"] == "user", key=str(i))
@@ -109,7 +105,6 @@ if 'app' in st.session_state:
 else:
     st.info("👈 Please enter your OpenAI API key in the sidebar to start chatting!")
 
-# Clear chat history button
 if 'app' in st.session_state:
     if st.button("Clear Chat History"):
         st.session_state.messages = []

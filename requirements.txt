@@ -2,3 +2,5 @@ streamlit
 embedchain
 streamlit-chat
 sentence-transformers
+python-dotenv
+openai
